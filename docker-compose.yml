@@ -1,0 +1,40 @@
+# Try kafka-mcp end to end:
+#   docker compose up --build
+# then point an MCP client at http://localhost:8080/mcp (bearer token: demo-token),
+# or run kafka-mcp locally over stdio with --brokers localhost:29092.
+services:
+  kafka:
+    image: apache/kafka:4.1.0
+    ports:
+      - "127.0.0.1:29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # Produces orders and payments and runs a healthy, a slow and a stopped consumer group.
+  demo-producer:
+    build:
+      context: .
+      target: demo
+    depends_on: [kafka]
+    command: ["-brokers=kafka:9092"]
+
+  kafka-mcp:
+    build: .
+    depends_on: [kafka]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_MCP_HTTP_TOKEN: ${KAFKA_MCP_HTTP_TOKEN:-demo-token}
+    command: ["-transport=http", "-listen=0.0.0.0:8080"]
